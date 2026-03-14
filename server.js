@@ -8,11 +8,15 @@ const Product = require('./models/Product');
 const Banner = require('./models/Banner');
 
 const app = express();
+
+// --- FIXED CORS CONFIGURATION ---
 app.use(cors({
     origin: "https://armaghan-industrial-store.vercel.app",
-    methods: ["POST", "GET"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], // Explicitly allow these
+    allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true
 }));
+
 app.use(express.json());
 
 cloudinary.config({
@@ -177,7 +181,7 @@ const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  isAdmin: { type: Boolean, default: false } // Added this to differentiate users
+  isAdmin: { type: Boolean, default: false } 
 });
 const User = mongoose.model('User', userSchema);
 
@@ -207,11 +211,10 @@ app.post('/api/users/google-login', async (req, res) => {
         let user = await User.findOne({ email });
 
         if (!user) {
-            // Create user if they don't exist
             user = new User({
                 name: name,
                 email: email,
-                password: Math.random().toString(36).slice(-8), // Dummy password
+                password: Math.random().toString(36).slice(-8), 
                 isAdmin: false
             });
             await user.save();
