@@ -8,7 +8,11 @@ const Product = require('./models/Product');
 const Banner = require('./models/Banner');
 
 const app = express();
-app.use(cors());
+app.use(cors({
+    origin: "https://armaghan-industrial-store.vercel.app",
+    methods: ["POST", "GET"],
+    credentials: true
+}));
 app.use(express.json());
 
 cloudinary.config({
