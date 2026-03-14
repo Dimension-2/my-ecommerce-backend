@@ -4,19 +4,15 @@ const mongoose = require('mongoose');
 const cloudinary = require('cloudinary').v2;
 const multer = require('multer');
 const cors = require('cors');
-const Product = require('./models/Product');
-const Banner = require('./models/Banner');
 
 const app = express();
 
-// --- FIXED CORS CONFIGURATION ---
+// --- FIXED CORS ---
 app.use(cors({
     origin: "https://armaghan-industrial-store.vercel.app",
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], // Explicitly allow these
-    allowedHeaders: ["Content-Type", "Authorization"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true
 }));
-
 app.use(express.json());
 
 cloudinary.config({
@@ -32,7 +28,22 @@ mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("MongoDB & Cloudinary Ready!"))
     .catch(err => console.log(err));
 
-// --- CATEGORY MODEL ---
+// --- ALL MODELS (No external files needed) ---
+
+const ProductSchema = new mongoose.Schema({
+    title: String,
+    price: String,
+    imageURL: String
+});
+const Product = mongoose.model('Product', ProductSchema);
+
+const BannerSchema = new mongoose.Schema({
+    imageURL: String,
+    title: String,
+    subtitle: String
+});
+const Banner = mongoose.model('Banner', BannerSchema);
+
 const CategorySchema = new mongoose.Schema({
     title: String,
     subtitle: String,
@@ -41,22 +52,29 @@ const CategorySchema = new mongoose.Schema({
 });
 const Category = mongoose.model('Category', CategorySchema);
 
-// --- ORDER MODEL (NEW) ---
 const OrderSchema = new mongoose.Schema({
     customerName: String,
     phoneNumber: String,
     email: String,
     city: String,
     address: String,
-    items: Array,        // List of products from the cart
+    items: Array,
     totalAmount: Number,
-    status: { type: String, default: 'Pending' }, // Pending, Shipped, Delivered
+    status: { type: String, default: 'Pending' },
     paymentMethod: { type: String, default: 'Cash on Delivery' },
     createdAt: { type: Date, default: Date.now }
 });
 const Order = mongoose.model('Order', OrderSchema);
 
-// Helper for Cloudinary Upload
+const UserSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  isAdmin: { type: Boolean, default: false }
+});
+const User = mongoose.model('User', UserSchema);
+
+// --- HELPER ---
 const streamUpload = (buffer) => {
     return new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream((error, result) => {
@@ -83,8 +101,10 @@ app.post('/api/products', upload.single('image'), async (req, res) => {
 });
 
 app.get('/api/products', async (req, res) => {
-    const products = await Product.find();
-    res.json(products);
+    try {
+        const products = await Product.find();
+        res.json(products);
+    } catch (err) { res.status(500).send(err); }
 });
 
 app.delete('/api/products/:id', async (req, res) => {
@@ -108,8 +128,10 @@ app.post('/api/banners', upload.single('image'), async (req, res) => {
 });
 
 app.get('/api/banners', async (req, res) => {
-    const banners = await Banner.find();
-    res.json(banners);
+    try {
+        const banners = await Banner.find();
+        res.json(banners);
+    } catch (err) { res.status(500).send(err); }
 });
 
 app.delete('/api/banners/:id', async (req, res) => {
@@ -134,8 +156,10 @@ app.post('/api/categories', upload.single('image'), async (req, res) => {
 });
 
 app.get('/api/categories', async (req, res) => {
-    const categories = await Category.find();
-    res.json(categories);
+    try {
+        const categories = await Category.find();
+        res.json(categories);
+    } catch (err) { res.status(500).send(err); }
 });
 
 app.delete('/api/categories/:id', async (req, res) => {
@@ -143,60 +167,39 @@ app.delete('/api/categories/:id', async (req, res) => {
     res.send("Category Deleted");
 });
 
-// --- ORDER ROUTES (NEW) ---
-
-// 1. Route for user to place an order
+// --- ORDER ROUTES ---
 app.post('/api/orders', async (req, res) => {
     try {
         const newOrder = new Order(req.body);
         await newOrder.save();
         res.status(200).send({ message: "Order Placed Successfully!", orderId: newOrder._id });
-    } catch (err) {
-        res.status(500).send("Error placing order");
-    }
+    } catch (err) { res.status(500).send("Error placing order"); }
 });
 
-// 2. Route for Admin to see all orders
 app.get('/api/orders', async (req, res) => {
     try {
         const orders = await Order.find().sort({ createdAt: -1 });
         res.json(orders);
-    } catch (err) {
-        res.status(500).send("Error fetching orders");
-    }
+    } catch (err) { res.status(500).send("Error fetching orders"); }
 });
 
-// 3. Update Status (Pending/Delivered)
 app.put('/api/orders/:id', async (req, res) => {
     try {
         await Order.findByIdAndUpdate(req.params.id, { status: req.body.status });
         res.send("Status Updated");
-    } catch (err) {
-        res.status(500).send("Error updating status");
-    }
+    } catch (err) { res.status(500).send("Error updating status"); }
 });
 
-// --- USER MODEL ---
-const userSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  isAdmin: { type: Boolean, default: false } 
-});
-const User = mongoose.model('User', userSchema);
-
-// Signup Route
+// --- USER ROUTES ---
 app.post('/api/users/signup', async (req, res) => {
   const { name, email, password } = req.body;
   const existing = await User.findOne({ email });
   if (existing) return res.status(400).send({ message: "Email already exists" });
-  
   const newUser = new User({ name, email, password }); 
   await newUser.save();
   res.send(newUser);
 });
 
-// Login Route
 app.post('/api/users/login', async (req, res) => {
   const { email, password } = req.body;
   const user = await User.findOne({ email, password });
@@ -204,12 +207,10 @@ app.post('/api/users/login', async (req, res) => {
   res.send(user);
 });
 
-// --- GOOGLE LOGIN ROUTE (NEW) ---
 app.post('/api/users/google-login', async (req, res) => {
     const { email, name } = req.body;
     try {
         let user = await User.findOne({ email });
-
         if (!user) {
             user = new User({
                 name: name,
@@ -219,11 +220,8 @@ app.post('/api/users/google-login', async (req, res) => {
             });
             await user.save();
         }
-
         res.status(200).json(user);
-    } catch (error) {
-        res.status(500).json({ message: "Google Login Error" });
-    }
+    } catch (error) { res.status(500).json({ message: "Google Login Error" }); }
 });
 
 app.listen(5000, () => console.log("Server running on port 5000"));
